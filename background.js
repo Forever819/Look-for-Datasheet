@@ -108,38 +108,51 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
  *           phase 2: 等待详情渲染, 打开 PDF
  */
 function autoClickSemieeFull() {
-  const MAX_WAIT = 12000;  // 总超时 12 秒 (两阶段共享)
+  const MAX_WAIT = 12000;
   const INTERVAL = 300;
   const start = Date.now();
   let phase = 1;
 
+  console.log("[DS] 脚本已注入, 开始等待搜索结果...");
+
   function tick() {
-    if (Date.now() - start > MAX_WAIT) return;
+    const elapsed = Date.now() - start;
+    if (elapsed > MAX_WAIT) {
+      console.log("[DS] 超时退出, phase=" + phase);
+      return;
+    }
 
     if (phase === 1) {
-      // 阶段1: 点击第一条搜索结果
       const item = document.querySelector("#searchResult .result-one");
       if (item) {
+        console.log("[DS] 阶段1: 找到 .result-one, 点击");
         item.click();
         phase = 2;
-        setTimeout(tick, 800); // 等待详情 AJAX 渲染
+        setTimeout(tick, 800);
         return;
+      }
+      if (elapsed % 1500 < INTERVAL) {
+        console.log("[DS] 阶段1: 等待 #searchResult .result-one...");
       }
     }
 
     if (phase === 2) {
-      // 阶段2: 找 PDF 并打开
+      // 检查 URL 是否已改变 (可能发生了页面跳转)
+      console.log("[DS] 阶段2: 当前 URL=" + window.location.href);
+
       // 方案1: 点击 PDF 图标
       const pdfIcon = document.querySelector(".openPDFFile");
       if (pdfIcon) {
+        console.log("[DS] 阶段2: 找到 .openPDFFile, 点击");
         pdfIcon.click();
         return;
       }
 
-      // 方案2: 从 "打开" 按钮的 data-href 取 URL
+      // 方案2: "打开" 按钮的 data-href
       const openBtn = document.querySelector(".openFile[data-href]");
       if (openBtn) {
         const url = openBtn.getAttribute("data-href");
+        console.log("[DS] 阶段2: 找到 .openFile, data-href=" + url);
         if (url) { window.open(url, "_blank"); return; }
       }
 
@@ -147,16 +160,27 @@ function autoClickSemieeFull() {
       const dl = document.querySelector(".downloadFile a[href]");
       if (dl) {
         const url = dl.getAttribute("href");
+        console.log("[DS] 阶段2: 找到 .downloadFile a, href=" + url);
         if (url && !url.includes("javascript")) {
           window.open(url, "_blank"); return;
         }
       }
 
-      // 方案4: AI 对话按钮的 data-href
+      // 方案4: AI 对话按钮
       const ai = document.querySelector(".j-ai-chat[data-href]");
       if (ai) {
         const url = ai.getAttribute("data-href");
+        console.log("[DS] 阶段2: 找到 .j-ai-chat, data-href=" + url);
         if (url) { window.open(url, "_blank"); return; }
+      }
+
+      // 诊断: 输出当前页面关键元素存在情况
+      if (elapsed % 2000 < INTERVAL) {
+        console.log("[DS] 阶段2: 诊断 - " +
+          "hasSearchResult=" + !!document.querySelector("#searchResult") +
+          " hasOpenPDFFile=" + !!document.querySelector(".openPDFFile") +
+          " hasOpenFile=" + !!document.querySelector(".openFile") +
+          " hasDetailsGuige=" + !!document.querySelector(".details-guige"));
       }
     }
 
