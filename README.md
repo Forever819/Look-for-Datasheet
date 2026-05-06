@@ -4,6 +4,8 @@
 
 支持 **semiee.com（半导小芯）** 和 **LCSC（szlcsc.com）** 两个数据源。
 
+![效果预览](ex.webp)
+
 ---
 
 ## 安装与更新
@@ -30,21 +32,21 @@
 
 ### 核心概念映射
 
-| Chrome 扩展概念 | C/嵌入式类比 | 说明 |
-|:--|:--|:--|
-| **Manifest V3** | STM32CubeMX `.ioc` | 声明扩展权限、入口、资源 |
-| **Service Worker** | `while(1)` 主循环 | 扩展后台进程，事件驱动，空闲休眠 |
-| **Context Menu** | GPIO EXTI 中断 | 用户右键 → 触发回调 |
-| **`chrome.tabs.create()`** | FreeRTOS `xTaskCreate()` | 创建新标签页 |
-| **`chrome.scripting.executeScript()`** | SWD 烧录一段代码到 RAM 并跳转执行 | 向目标页面注入 JS 函数 |
-| **`world: "MAIN"` vs `ISOLATED`** | 用户态 vs 内核态 / ring0 vs ring3 | MAIN 才能拦截页面 JS；ISOLATED 是沙盒，只能自说自话 |
-| **DOM** | 寄存器映射表 | `document.querySelector()` ≈ `GPIOA->IDR` |
-| **`window.location.href`** | `PC = 0x08001000` | 直接跳转地址，不被弹窗拦截器阻止 |
-| **`window.open()`** | 启动第二个核 | 会被 Chrome 拦截，非用户手势静默丢弃 |
-| **CSS Selector** | 文件路径 | `#searchResult .result-one` ≈ `/bus/uart1/tx_buffer[0]` |
-| **`.click()`** | GPIO 脉冲 | 拉高→拉低，触发目标元素的事件处理器 |
-| **`MutationObserver`** | DMA 完成中断 | 监听 DOM 变化 |
-| **`managedTabs` Map** | 有限状态机 FSM | 追踪每个标签页处于哪个阶段 |
+| Chrome 扩展概念                            | C/嵌入式类比                     | 说明                                                      |
+|:-------------------------------------- |:--------------------------- |:------------------------------------------------------- |
+| **Manifest V3**                        | STM32CubeMX `.ioc`          | 声明扩展权限、入口、资源                                            |
+| **Service Worker**                     | `while(1)` 主循环              | 扩展后台进程，事件驱动，空闲休眠                                        |
+| **Context Menu**                       | GPIO EXTI 中断                | 用户右键 → 触发回调                                             |
+| **`chrome.tabs.create()`**             | FreeRTOS `xTaskCreate()`    | 创建新标签页                                                  |
+| **`chrome.scripting.executeScript()`** | SWD 烧录一段代码到 RAM 并跳转执行       | 向目标页面注入 JS 函数                                           |
+| **`world: "MAIN"` vs `ISOLATED`**      | 用户态 vs 内核态 / ring0 vs ring3 | MAIN 才能拦截页面 JS；ISOLATED 是沙盒，只能自说自话                      |
+| **DOM**                                | 寄存器映射表                      | `document.querySelector()` ≈ `GPIOA->IDR`               |
+| **`window.location.href`**             | `PC = 0x08001000`           | 直接跳转地址，不被弹窗拦截器阻止                                        |
+| **`window.open()`**                    | 启动第二个核                      | 会被 Chrome 拦截，非用户手势静默丢弃                                  |
+| **CSS Selector**                       | 文件路径                        | `#searchResult .result-one` ≈ `/bus/uart1/tx_buffer[0]` |
+| **`.click()`**                         | GPIO 脉冲                     | 拉高→拉低，触发目标元素的事件处理器                                      |
+| **`MutationObserver`**                 | DMA 完成中断                    | 监听 DOM 变化                                               |
+| **`managedTabs` Map**                  | 有限状态机 FSM                   | 追踪每个标签页处于哪个阶段                                           |
 
 ### 全链路数据流
 
@@ -144,12 +146,19 @@ Chorme_Plugin/
 
 ### 权限说明
 
-| 权限 | 用途 |
-|:--|:--|
-| `contextMenus` | 创建右键菜单项 |
-| `scripting` | 向页面注入自动点击脚本 |
-| `https://www.semiee.com/*` | semiee 搜索/详情页 |
-| `https://so.szlcsc.com/*` | LCSC 搜索页 |
-| `https://item.szlcsc.com/*` | LCSC 产品详情页 |
+| 权限                          | 用途            |
+|:--------------------------- |:------------- |
+| `contextMenus`              | 创建右键菜单项       |
+| `scripting`                 | 向页面注入自动点击脚本   |
+| `https://www.semiee.com/*`  | semiee 搜索/详情页 |
+| `https://so.szlcsc.com/*`   | LCSC 搜索页      |
+| `https://item.szlcsc.com/*` | LCSC 产品详情页    |
 
 不读取任何网页内容，不上传任何数据。
+
+---
+
+## 贡献者
+
+- [Lyrinc](https://github.com/Lyrinc)
+- [DeepSeek](https://deepseek.com/) — AI 协作开发
