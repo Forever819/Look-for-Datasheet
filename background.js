@@ -111,36 +111,82 @@ function autoClickSemieeFull() {
   const MAX_WAIT = 12000;
   const INTERVAL = 300;
   const start = Date.now();
-  let phase = 1;
+  let phase = 1;           // 1=搜索页找结果并点击, 2=详情页找PDF
+  let tryIdx = 0;          // 当前尝试的点击目标索引, 0=未开始
+  let clickTime = 0;       // 上次点击的时刻
 
-  console.log("[DS] 脚本已注入, 开始等待搜索结果...");
+  // 阶段1 的点击目标列表 (按优先级)
+  const TARGETS = [
+    { sel: "#searchResult .result-one .type-detail", name: "type-detail" },
+    { sel: "#searchResult .result-one .bord",        name: "bord" },
+    { sel: "#searchResult .result-one",              name: "result-one" }
+  ];
+
+  console.log("[DS] 脚本已注入, 等待搜索结果...");
 
   function tick() {
-    const elapsed = Date.now() - start;
-    if (elapsed > MAX_WAIT) {
-      console.log("[DS] 超时退出, phase=" + phase);
+    const now = Date.now();
+    if (now - start > MAX_WAIT) {
+      console.log("[DS] 超时退出, phase=" + phase + " tryIdx=" + tryIdx +
+        " URL=" + window.location.href);
       return;
     }
 
+    // 检测 URL 是否已离开搜索页面
+    const onSearchPage = window.location.href.includes("/search?");
+    if (phase === 1 && !onSearchPage) {
+      console.log("[DS] 已离开搜索页, 进入阶段2");
+      phase = 2;
+    }
+
+    /* ======================================================================
+       阶段1: 在搜索页轮流尝试点击不同子元素
+       ====================================================================== */
+
     if (phase === 1) {
-      const item = document.querySelector("#searchResult .result-one");
-      if (item) {
-        console.log("[DS] 阶段1: 找到 .result-one, 点击");
-        item.click();
-        phase = 2;
-        setTimeout(tick, 800);
+      // 刚点过, 等冷却
+      if (now - clickTime < 1200) {
+        setTimeout(tick, INTERVAL);
         return;
       }
-      if (elapsed % 1500 < INTERVAL) {
-        console.log("[DS] 阶段1: 等待 #searchResult .result-one...");
+
+      // 如果已尝试但 URL 没变, 记录并前进
+      if (tryIdx > 0 && onSearchPage) {
+        console.log("[DS] 阶段1: 方案" + (tryIdx - 1) +
+          "(" + TARGETS[tryIdx - 1].name + ") 点击后 URL 未变");
+      }
+
+      // 尝试当前目标
+      if (tryIdx < TARGETS.length) {
+        const t = TARGETS[tryIdx];
+        const el = document.querySelector(t.sel);
+        if (el) {
+          console.log("[DS] 阶段1: 方案" + tryIdx + " 点击 " + t.name);
+          el.click();
+          clickTime = now;
+          tryIdx++;
+        } else {
+          console.log("[DS] 阶段1: 方案" + tryIdx + " 元素不存在: " + t.sel);
+          tryIdx++;
+        }
+      } else {
+        // 全试过了, 继续轮询 (可能页面动态变化)
+        if ((now - start) % 3000 < INTERVAL) {
+          console.log("[DS] 阶段1: 全部" + TARGETS.length +
+            "个方案已尝试, 持续轮询中... URL=" + window.location.href);
+        }
       }
     }
 
-    if (phase === 2) {
-      // 检查 URL 是否已改变 (可能发生了页面跳转)
-      console.log("[DS] 阶段2: 当前 URL=" + window.location.href);
+    /* ======================================================================
+       阶段2: 在详情页找 PDF 元素
+       ====================================================================== */
 
-      // 方案1: 点击 PDF 图标
+    if (phase === 2) {
+      if ((now - start) % 2000 < INTERVAL) {
+        console.log("[DS] 阶段2: URL=" + window.location.href);
+      }
+
       const pdfIcon = document.querySelector(".openPDFFile");
       if (pdfIcon) {
         console.log("[DS] 阶段2: 找到 .openPDFFile, 点击");
@@ -148,7 +194,6 @@ function autoClickSemieeFull() {
         return;
       }
 
-      // 方案2: "打开" 按钮的 data-href
       const openBtn = document.querySelector(".openFile[data-href]");
       if (openBtn) {
         const url = openBtn.getAttribute("data-href");
@@ -156,7 +201,6 @@ function autoClickSemieeFull() {
         if (url) { window.open(url, "_blank"); return; }
       }
 
-      // 方案3: 隐藏的下载链接
       const dl = document.querySelector(".downloadFile a[href]");
       if (dl) {
         const url = dl.getAttribute("href");
@@ -166,7 +210,6 @@ function autoClickSemieeFull() {
         }
       }
 
-      // 方案4: AI 对话按钮
       const ai = document.querySelector(".j-ai-chat[data-href]");
       if (ai) {
         const url = ai.getAttribute("data-href");
@@ -174,13 +217,12 @@ function autoClickSemieeFull() {
         if (url) { window.open(url, "_blank"); return; }
       }
 
-      // 诊断: 输出当前页面关键元素存在情况
-      if (elapsed % 2000 < INTERVAL) {
-        console.log("[DS] 阶段2: 诊断 - " +
-          "hasSearchResult=" + !!document.querySelector("#searchResult") +
-          " hasOpenPDFFile=" + !!document.querySelector(".openPDFFile") +
-          " hasOpenFile=" + !!document.querySelector(".openFile") +
-          " hasDetailsGuige=" + !!document.querySelector(".details-guige"));
+      if ((now - start) % 2000 < INTERVAL) {
+        console.log("[DS] 阶段2: 诊断 " +
+          "searchR=" + !!document.querySelector("#searchResult") +
+          " pdfIcon=" + !!document.querySelector(".openPDFFile") +
+          " openFile=" + !!document.querySelector(".openFile") +
+          " detailsGuige=" + !!document.querySelector(".details-guige"));
       }
     }
 
