@@ -1,0 +1,13 @@
+# Claude
+.claude/
+
+# Reference files (not part of the extension)
+source.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
