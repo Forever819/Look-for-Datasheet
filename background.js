@@ -141,19 +141,19 @@ function autoClickSemieeFull() {
       if (openBtn) {
         const url = openBtn.getAttribute("data-href");
         console.log("[DS] 打开 PDF: " + url);
-        if (url) { window.open(url, "_blank"); return; }
+        if (url) { window.location.href = url; return; }
       }
       if (dl) {
         const url = dl.getAttribute("href");
         console.log("[DS] 下载链接: " + url);
         if (url && !url.includes("javascript")) {
-          window.open(url, "_blank"); return;
+          window.location.href = url; return;
         }
       }
       if (ai) {
         const url = ai.getAttribute("data-href");
         console.log("[DS] AI对话链接: " + url);
-        if (url) { window.open(url, "_blank"); return; }
+        if (url) { window.location.href = url; return; }
       }
     }
 
@@ -215,7 +215,7 @@ function autoClickLcscDetail() {
     navigator.clipboard.writeText = function (text) {
       if (text && (text.includes(".pdf") || text.includes("datasheet"))) {
         capturedPdfUrl = text;
-        window.open(text, "_blank");
+        window.location.href = text;
       }
       return orig(text);
     };
@@ -233,7 +233,7 @@ function autoClickLcscDetail() {
         a.href?.includes(".pdf") || a.href?.includes("datasheet")
       ) {
         if (a.href && !a.href.includes("javascript")) {
-          window.open(a.href, "_blank");
+          window.location.href = a.href;
           return;
         }
       }
