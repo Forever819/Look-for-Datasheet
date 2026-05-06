@@ -159,6 +159,4 @@ Chorme_Plugin/
 ---
 
 ## 贡献者
-
-- [Lyrinc](https://github.com/Lyrinc)
 - [DeepSeek](https://deepseek.com/) — AI 协作开发
