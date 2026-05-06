@@ -80,15 +80,18 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status !== "complete") return;
 
   if (state.stage === "search") {
-    // 注入搜索页自动点击, 同时标记下一阶段
-    managedTabs.set(tabId, { source: state.source, stage: "detail" });
-    const func = state.source === LCSC_MENU_ID ? autoClickLcscSearch : autoClickSemieeSearch;
-    chrome.scripting.executeScript({ target: { tabId }, func }).catch(() => {});
+    if (state.source === SEMIEE_MENU_ID) {
+      // semiee 可能在同一个页面用 AJAX 加载详情, 合并搜索+详情一键完成
+      managedTabs.delete(tabId);
+      chrome.scripting.executeScript({ target: { tabId }, func: autoClickSemieeFull }).catch(() => {});
+    } else {
+      // LCSC 走页面跳转, 搜索页 → 产品页 → PDF 两阶段
+      managedTabs.set(tabId, { source: state.source, stage: "detail" });
+      chrome.scripting.executeScript({ target: { tabId }, func: autoClickLcscSearch }).catch(() => {});
+    }
   } else if (state.stage === "detail") {
-    // 注入产品页自动点击 datasheet
     managedTabs.delete(tabId);
-    const func = state.source === LCSC_MENU_ID ? autoClickLcscDetail : autoClickSemieeDetail;
-    chrome.scripting.executeScript({ target: { tabId }, func }).catch(() => {});
+    chrome.scripting.executeScript({ target: { tabId }, func: autoClickLcscDetail }).catch(() => {});
   }
 });
 
@@ -97,80 +100,70 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
    ========================================================================== */
 
 /**
- * @brief semiee 搜索页 — 等待 #searchResult 渲染后自动点击第一条结果
- */
-function autoClickSemieeSearch() {
-  const MAX_WAIT = 5000;
-  const INTERVAL = 300;
-  const start = Date.now();
-
-  function tryClick() {
-    // semiee 搜索结果结构: #searchResult > .result-one (div 元素, 通过 JS 事件处理点击)
-    const item = document.querySelector("#searchResult .result-one");
-    if (item) {
-      item.click();
-      return;
-    }
-    if (Date.now() - start < MAX_WAIT) setTimeout(tryClick, INTERVAL);
-  }
-  setTimeout(tryClick, 800);
-}
-
-/**
- * @brief semiee 产品详情页 — 自动打开 PDF 数据手册
+ * @brief semiee 一站式脚本 — 搜索 → 点击结果 → 打开 PDF
  *
- *         DOM 结构 (从实际页面提取):
- *         .openPDFFile           — 点击打开 PDF 的图标
- *         .openFile[data-href]   — "打开"按钮, data-href 是 PDF URL
- *         .downloadFile a[href]  — 隐藏的下载链接
- *         .j-ai-chat[data-href]  — AI对话按钮, data-href 也是 PDF URL
+ *         在同一页面内完成全链条 (因为 semiee 可能用 AJAX 加载详情, 不触发 URL 变化)。
+ *         分两个阶段:
+ *           phase 1: 等待搜索结果, 点击第一个 .result-one
+ *           phase 2: 等待详情渲染, 打开 PDF
  */
-function autoClickSemieeDetail() {
-  const MAX_WAIT = 5000;
+function autoClickSemieeFull() {
+  const MAX_WAIT = 12000;  // 总超时 12 秒 (两阶段共享)
   const INTERVAL = 300;
   const start = Date.now();
+  let phase = 1;
 
-  function tryClick() {
-    // 方案1: 点击打开 PDF 的图标 (最直接)
-    const pdfIcon = document.querySelector(".openPDFFile");
-    if (pdfIcon) {
-      pdfIcon.click();
-      return;
-    }
+  function tick() {
+    if (Date.now() - start > MAX_WAIT) return;
 
-    // 方案2: 从 "打开" 按钮的 data-href 获取 PDF URL
-    const openBtn = document.querySelector(".openFile[data-href]");
-    if (openBtn) {
-      const url = openBtn.getAttribute("data-href");
-      if (url) {
-        window.open(url, "_blank");
+    if (phase === 1) {
+      // 阶段1: 点击第一条搜索结果
+      const item = document.querySelector("#searchResult .result-one");
+      if (item) {
+        item.click();
+        phase = 2;
+        setTimeout(tick, 800); // 等待详情 AJAX 渲染
         return;
       }
     }
 
-    // 方案3: 点击隐藏的下载 <a>
-    const downloadLink = document.querySelector(".downloadFile a[href]");
-    if (downloadLink) {
-      const url = downloadLink.getAttribute("href");
-      if (url && !url.includes("javascript")) {
-        window.open(url, "_blank");
+    if (phase === 2) {
+      // 阶段2: 找 PDF 并打开
+      // 方案1: 点击 PDF 图标
+      const pdfIcon = document.querySelector(".openPDFFile");
+      if (pdfIcon) {
+        pdfIcon.click();
         return;
+      }
+
+      // 方案2: 从 "打开" 按钮的 data-href 取 URL
+      const openBtn = document.querySelector(".openFile[data-href]");
+      if (openBtn) {
+        const url = openBtn.getAttribute("data-href");
+        if (url) { window.open(url, "_blank"); return; }
+      }
+
+      // 方案3: 隐藏的下载链接
+      const dl = document.querySelector(".downloadFile a[href]");
+      if (dl) {
+        const url = dl.getAttribute("href");
+        if (url && !url.includes("javascript")) {
+          window.open(url, "_blank"); return;
+        }
+      }
+
+      // 方案4: AI 对话按钮的 data-href
+      const ai = document.querySelector(".j-ai-chat[data-href]");
+      if (ai) {
+        const url = ai.getAttribute("data-href");
+        if (url) { window.open(url, "_blank"); return; }
       }
     }
 
-    // 方案4: 从 AI 对话按钮的 data-href 获取
-    const aiChat = document.querySelector(".j-ai-chat[data-href]");
-    if (aiChat) {
-      const url = aiChat.getAttribute("data-href");
-      if (url) {
-        window.open(url, "_blank");
-        return;
-      }
-    }
-
-    if (Date.now() - start < MAX_WAIT) setTimeout(tryClick, INTERVAL);
+    setTimeout(tick, INTERVAL);
   }
-  setTimeout(tryClick, 800);
+
+  setTimeout(tick, 800);
 }
 
 /**
