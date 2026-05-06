@@ -83,7 +83,8 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (state.source === SEMIEE_MENU_ID) {
       // semiee: 搜索结果点击后在新标签页打开详情, 先注入搜索页脚本拦截 window.open
       managedTabs.set(tabId, { source: state.source, stage: "semiee-detail" });
-      chrome.scripting.executeScript({ target: { tabId }, func: autoClickSemieeSearch }).catch(() => {});
+      // world: 'MAIN' 确保能拦截页面自己的 window.open 调用
+      chrome.scripting.executeScript({ target: { tabId }, func: autoClickSemieeSearch, world: "MAIN" }).catch(() => {});
     } else {
       // LCSC: 页面跳转, 搜索页 → 产品页 → PDF 两阶段
       managedTabs.set(tabId, { source: state.source, stage: "detail" });
