@@ -117,16 +117,34 @@ function autoClickSemieeSearch() {
 
   // 拦截 window.open, 捕获详情页 URL
   const origOpen = window.open;
-  window.open = function(url) {
-    console.log("[DS] 拦截 window.open: " + url);
-    if (url && url.includes("semiee.com") && !url.includes("/search")) {
-      console.log("[DS] 重定向当前标签页到详情页");
-      window.location.href = url;
+  window.open = function(url, target, features) {
+    console.log("[DS] 拦截 window.open: url=" + url + " target=" + target);
+    // 接受任何同站非搜索页的 URL
+    if (url && (url.includes("semiee.com") || url.startsWith("/")) && !url.includes("/search")) {
+      const fullUrl = url.startsWith("/") ? window.location.origin + url : url;
+      console.log("[DS] 重定向到: " + fullUrl);
+      window.location.href = fullUrl;
+      return null;
     }
-    return null; // 阻止新标签页
+    // 未匹配, 放行
+    console.log("[DS] 未匹配, 放行原始 window.open");
+    return origOpen(url, target, features);
   };
 
-  console.log("[DS] 已安装 window.open 拦截, 等待搜索结果...");
+  // 备用: 监听所有 <a target=_blank> 点击, 阻止新标签并重定向
+  document.addEventListener("click", function(e) {
+    const a = e.target.closest("a");
+    if (a && a.target === "_blank" && a.href) {
+      console.log("[DS] 拦截 <a target=_blank>: " + a.href);
+      if (a.href.includes("semiee.com") && !a.href.includes("/search")) {
+        e.preventDefault();
+        console.log("[DS] 重定向到: " + a.href);
+        window.location.href = a.href;
+      }
+    }
+  }, true);
+
+  console.log("[DS] 已安装拦截器, 等待搜索结果...");
 
   function tryClick() {
     const item = document.querySelector("#searchResult .result-one");
