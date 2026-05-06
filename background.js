@@ -117,7 +117,13 @@ function autoClickSemieeSearch() {
 }
 
 /**
- * @brief semiee 产品详情页 — 自动点击 datasheet/PDF 链接
+ * @brief semiee 产品详情页 — 自动打开 PDF 数据手册
+ *
+ *         DOM 结构 (从实际页面提取):
+ *         .openPDFFile           — 点击打开 PDF 的图标
+ *         .openFile[data-href]   — "打开"按钮, data-href 是 PDF URL
+ *         .downloadFile a[href]  — 隐藏的下载链接
+ *         .j-ai-chat[data-href]  — AI对话按钮, data-href 也是 PDF URL
  */
 function autoClickSemieeDetail() {
   const MAX_WAIT = 5000;
@@ -125,31 +131,39 @@ function autoClickSemieeDetail() {
   const start = Date.now();
 
   function tryClick() {
-    // 尝试多种常见的 datasheet 链接选择器
-    const selectors = [
-      "a[href*='.pdf']",
-      "a[href*='datasheet']",
-      "a[href*='file/']",
-      "a[href*='download']",
-      "[class*='datasheet'] a",
-      "[class*='pdf'] a",
-      ".btn-download a",
-      "a[class*='download']"
-    ];
-    for (const sel of selectors) {
-      const link = document.querySelector(sel);
-      if (link && link.href && !link.href.includes("javascript")) {
-        window.open(link.href, "_blank");
+    // 方案1: 点击打开 PDF 的图标 (最直接)
+    const pdfIcon = document.querySelector(".openPDFFile");
+    if (pdfIcon) {
+      pdfIcon.click();
+      return;
+    }
+
+    // 方案2: 从 "打开" 按钮的 data-href 获取 PDF URL
+    const openBtn = document.querySelector(".openFile[data-href]");
+    if (openBtn) {
+      const url = openBtn.getAttribute("data-href");
+      if (url) {
+        window.open(url, "_blank");
         return;
       }
     }
 
-    // 备用: 查找含"规格书"或"数据手册"或"PDF"文本的可点击元素
-    const all = document.querySelectorAll("a, button, [class*='btn'], [class*='link']");
-    for (const el of all) {
-      const text = (el.textContent || "").toLowerCase();
-      if (text.includes("规格书") || text.includes("数据手册") || text.includes("pdf")) {
-        el.click();
+    // 方案3: 点击隐藏的下载 <a>
+    const downloadLink = document.querySelector(".downloadFile a[href]");
+    if (downloadLink) {
+      const url = downloadLink.getAttribute("href");
+      if (url && !url.includes("javascript")) {
+        window.open(url, "_blank");
+        return;
+      }
+    }
+
+    // 方案4: 从 AI 对话按钮的 data-href 获取
+    const aiChat = document.querySelector(".j-ai-chat[data-href]");
+    if (aiChat) {
+      const url = aiChat.getAttribute("data-href");
+      if (url) {
+        window.open(url, "_blank");
         return;
       }
     }
