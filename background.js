@@ -97,7 +97,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
    ========================================================================== */
 
 /**
- * @brief semiee 搜索页 — 等待结果加载后自动点击第一条
+ * @brief semiee 搜索页 — 等待 #searchResult 渲染后自动点击第一条结果
  */
 function autoClickSemieeSearch() {
   const MAX_WAIT = 5000;
@@ -105,20 +105,11 @@ function autoClickSemieeSearch() {
   const start = Date.now();
 
   function tryClick() {
-    const selectors = [
-      ".search-list a",
-      ".result-item a",
-      ".search-result a",
-      ".product-item a",
-      "table a",
-      ".list a"
-    ];
-    for (const sel of selectors) {
-      const link = document.querySelector(sel);
-      if (link && link.href && !link.href.includes("javascript")) {
-        window.location.href = link.href;
-        return;
-      }
+    // semiee 搜索结果结构: #searchResult > .result-one (div 元素, 通过 JS 事件处理点击)
+    const item = document.querySelector("#searchResult .result-one");
+    if (item) {
+      item.click();
+      return;
     }
     if (Date.now() - start < MAX_WAIT) setTimeout(tryClick, INTERVAL);
   }
@@ -134,10 +125,12 @@ function autoClickSemieeDetail() {
   const start = Date.now();
 
   function tryClick() {
+    // 尝试多种常见的 datasheet 链接选择器
     const selectors = [
       "a[href*='.pdf']",
       "a[href*='datasheet']",
       "a[href*='file/']",
+      "a[href*='download']",
       "[class*='datasheet'] a",
       "[class*='pdf'] a",
       ".btn-download a",
@@ -150,6 +143,17 @@ function autoClickSemieeDetail() {
         return;
       }
     }
+
+    // 备用: 查找含"规格书"或"数据手册"或"PDF"文本的可点击元素
+    const all = document.querySelectorAll("a, button, [class*='btn'], [class*='link']");
+    for (const el of all) {
+      const text = (el.textContent || "").toLowerCase();
+      if (text.includes("规格书") || text.includes("数据手册") || text.includes("pdf")) {
+        el.click();
+        return;
+      }
+    }
+
     if (Date.now() - start < MAX_WAIT) setTimeout(tryClick, INTERVAL);
   }
   setTimeout(tryClick, 800);
