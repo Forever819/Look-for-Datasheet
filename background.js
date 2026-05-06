@@ -134,27 +134,42 @@ function autoClickSemieeFull() {
         " openBtn=" + !!openBtn + " dl=" + !!dl + " ai=" + !!ai);
 
       if (pdfIcon) {
-        console.log("[DS] 点击 .openPDFFile");
+        console.log("[DS] 方案A: 点击 .openPDFFile");
         pdfIcon.click();
         return;
       }
       if (openBtn) {
         const url = openBtn.getAttribute("data-href");
-        console.log("[DS] 打开 PDF: " + url);
-        if (url) { window.location.href = url; return; }
+        console.log("[DS] 方案B: 点击 .openFile 元素");
+        // 直接点击元素, 触发站点的 JS 事件处理器 (避免弹窗拦截)
+        openBtn.click();
+        // 同时尝试 location 跳转作备份
+        if (url) {
+          console.log("[DS] 备份: location.href = " + encodeURI(url));
+          setTimeout(() => { window.location.href = url; }, 500);
+        }
+        return;
       }
       if (dl) {
         const url = dl.getAttribute("href");
-        console.log("[DS] 下载链接: " + url);
+        console.log("[DS] 方案C: downloadFile href = " + url);
         if (url && !url.includes("javascript")) {
-          window.location.href = url; return;
+          console.log("[DS] 执行跳转: location.href = " + encodeURI(url));
+          window.location.href = url;
+          return;
         }
       }
       if (ai) {
         const url = ai.getAttribute("data-href");
-        console.log("[DS] AI对话链接: " + url);
-        if (url) { window.location.href = url; return; }
+        console.log("[DS] 方案D: AI对话 data-href = " + url);
+        if (url) {
+          console.log("[DS] 执行跳转: location.href = " + encodeURI(url));
+          window.location.href = url;
+          return;
+        }
       }
+      // 如果以上都没 return (URL 为空), 打印警告
+      console.log("[DS] 警告: 找到详情元素但所有 URL 均无效");
     }
 
     // 详情元素未出现, 尝试点击搜索结果
