@@ -81,14 +81,18 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
   if (state.stage === "search") {
     if (state.source === SEMIEE_MENU_ID) {
-      // semiee 可能在同一个页面用 AJAX 加载详情, 合并搜索+详情一键完成
-      managedTabs.delete(tabId);
-      chrome.scripting.executeScript({ target: { tabId }, func: autoClickSemieeFull }).catch(() => {});
+      // semiee: 搜索结果点击后在新标签页打开详情, 先注入搜索页脚本拦截 window.open
+      managedTabs.set(tabId, { source: state.source, stage: "semiee-detail" });
+      chrome.scripting.executeScript({ target: { tabId }, func: autoClickSemieeSearch }).catch(() => {});
     } else {
-      // LCSC 走页面跳转, 搜索页 → 产品页 → PDF 两阶段
+      // LCSC: 页面跳转, 搜索页 → 产品页 → PDF 两阶段
       managedTabs.set(tabId, { source: state.source, stage: "detail" });
       chrome.scripting.executeScript({ target: { tabId }, func: autoClickLcscSearch }).catch(() => {});
     }
+  } else if (state.stage === "semiee-detail") {
+    // semiee 详情页加载完成, 注入 PDF 查找脚本
+    managedTabs.delete(tabId);
+    chrome.scripting.executeScript({ target: { tabId }, func: autoClickSemieeDetail }).catch(() => {});
   } else if (state.stage === "detail") {
     managedTabs.delete(tabId);
     chrome.scripting.executeScript({ target: { tabId }, func: autoClickLcscDetail }).catch(() => {});
@@ -100,98 +104,92 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
    ========================================================================== */
 
 /**
- * @brief semiee 一站式脚本 — 搜索 → 点击结果 → 打开 PDF
+ * @brief semiee 搜索页 — 拦截 window.open 后点击搜索结果, 重定向到详情页
  *
- *         在同一页面内完成全链条 (因为 semiee 可能用 AJAX 加载详情, 不触发 URL 变化)。
- *         分两个阶段:
- *           phase 1: 等待搜索结果, 点击第一个 .result-one
- *           phase 2: 等待详情渲染, 打开 PDF
+ *         semiee 点击搜索结果会用 window.open 打开新标签页,
+ *         拦截此调用并将当前标签页重定向到详情页 URL。
  */
-function autoClickSemieeFull() {
-  const MAX_WAIT = 12000;
+function autoClickSemieeSearch() {
+  const MAX_WAIT = 5000;
   const INTERVAL = 300;
   const start = Date.now();
-  let clicked = false;  // 是否已点击过搜索结果
 
-  console.log("[DS] 脚本已注入, 等待搜索结果...");
+  // 拦截 window.open, 捕获详情页 URL
+  const origOpen = window.open;
+  window.open = function(url) {
+    console.log("[DS] 拦截 window.open: " + url);
+    if (url && url.includes("semiee.com") && !url.includes("/search")) {
+      console.log("[DS] 重定向当前标签页到详情页");
+      window.location.href = url;
+    }
+    return null; // 阻止新标签页
+  };
 
-  function tick() {
-    const now = Date.now();
-    if (now - start > MAX_WAIT) {
-      console.log("[DS] 超时退出, clicked=" + clicked +
-        " URL=" + window.location.href);
+  console.log("[DS] 已安装 window.open 拦截, 等待搜索结果...");
+
+  function tryClick() {
+    const item = document.querySelector("#searchResult .result-one");
+    if (item) {
+      console.log("[DS] 点击第一条搜索结果");
+      item.click();
+      // 如果 2 秒内没跳转, 还原 window.open 避免影响后续
+      setTimeout(() => {
+        window.open = origOpen;
+        console.log("[DS] 2秒内未跳转, 还原 window.open");
+      }, 2000);
+      return;
+    }
+    if (Date.now() - start < MAX_WAIT) setTimeout(tryClick, INTERVAL);
+  }
+  setTimeout(tryClick, 800);
+}
+
+/**
+ * @brief semiee 产品详情页 — 自动打开 PDF 数据手册
+ *
+ *         详情页 DOM 结构:
+ *         .openPDFFile           — 点击打开 PDF 的图标
+ *         .openFile[data-href]   — "打开"按钮, data-href 是 PDF URL
+ *         .downloadFile a[href]  — 隐藏的下载链接
+ */
+function autoClickSemieeDetail() {
+  const MAX_WAIT = 5000;
+  const INTERVAL = 300;
+  const start = Date.now();
+
+  function tryClick() {
+    // 方案1: 点击 PDF 图标
+    const pdfIcon = document.querySelector(".openPDFFile");
+    if (pdfIcon) {
+      console.log("[DS] 详情页: 点击 .openPDFFile");
+      pdfIcon.click();
       return;
     }
 
-    // 先检查详情页元素是否已出现 (可能因之前的点击而加载)
-    const pdfIcon = document.querySelector(".openPDFFile");
+    // 方案2: 点击 "打开" 按钮 (触发站点 JS 事件)
     const openBtn = document.querySelector(".openFile[data-href]");
-    const dl      = document.querySelector(".downloadFile a[href]");
-    const ai      = document.querySelector(".j-ai-chat[data-href]");
-
-    if (pdfIcon || openBtn || dl || ai) {
-      console.log("[DS] 检测到详情元素! pdfIcon=" + !!pdfIcon +
-        " openBtn=" + !!openBtn + " dl=" + !!dl + " ai=" + !!ai);
-
-      if (pdfIcon) {
-        console.log("[DS] 方案A: 点击 .openPDFFile");
-        pdfIcon.click();
-        return;
-      }
-      if (openBtn) {
-        const url = openBtn.getAttribute("data-href");
-        console.log("[DS] 方案B: 点击 .openFile 元素");
-        // 直接点击元素, 触发站点的 JS 事件处理器 (避免弹窗拦截)
-        openBtn.click();
-        // 同时尝试 location 跳转作备份
-        if (url) {
-          console.log("[DS] 备份: location.href = " + encodeURI(url));
-          setTimeout(() => { window.location.href = url; }, 500);
-        }
-        return;
-      }
-      if (dl) {
-        const url = dl.getAttribute("href");
-        console.log("[DS] 方案C: downloadFile href = " + url);
-        if (url && !url.includes("javascript")) {
-          console.log("[DS] 执行跳转: location.href = " + encodeURI(url));
-          window.location.href = url;
-          return;
-        }
-      }
-      if (ai) {
-        const url = ai.getAttribute("data-href");
-        console.log("[DS] 方案D: AI对话 data-href = " + url);
-        if (url) {
-          console.log("[DS] 执行跳转: location.href = " + encodeURI(url));
-          window.location.href = url;
-          return;
-        }
-      }
-      // 如果以上都没 return (URL 为空), 打印警告
-      console.log("[DS] 警告: 找到详情元素但所有 URL 均无效");
+    if (openBtn) {
+      const url = openBtn.getAttribute("data-href");
+      console.log("[DS] 详情页: 点击 .openFile, url=" + url);
+      // 尝试直接跳转
+      if (url) { window.location.href = url; }
+      return;
     }
 
-    // 详情元素未出现, 尝试点击搜索结果
-    if (!clicked) {
-      const item = document.querySelector("#searchResult .result-one");
-      if (item) {
-        console.log("[DS] 点击第一条搜索结果");
-        item.click();
-        clicked = true;
-      } else if ((now - start) % 1500 < INTERVAL) {
-        console.log("[DS] 等待搜索结果出现...");
+    // 方案3: 隐藏下载链接
+    const dl = document.querySelector(".downloadFile a[href]");
+    if (dl) {
+      const url = dl.getAttribute("href");
+      console.log("[DS] 详情页: .downloadFile a, url=" + url);
+      if (url && !url.includes("javascript")) {
+        window.location.href = url;
+        return;
       }
-    } else if ((now - start) % 2000 < INTERVAL) {
-      // 已点击但详情未加载
-      console.log("[DS] 已点击搜索结果, 等待详情弹窗出现... " +
-        "pdfIcon=" + !!pdfIcon + " detailsGuige=" + !!document.querySelector(".details-guige"));
     }
 
-    setTimeout(tick, INTERVAL);
+    if (Date.now() - start < MAX_WAIT) setTimeout(tryClick, INTERVAL);
   }
-
-  setTimeout(tick, 800);
+  setTimeout(tryClick, 800);
 }
 
 /**
